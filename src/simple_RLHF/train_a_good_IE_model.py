@@ -162,6 +162,7 @@ class RLHFTrainer:
                 output_ends = memory["output_ends"]
 
                 #基于最新的critic计算价值
+
                 logits_actor, values = self.actor_critic.forward(sequences_actor, sequences_mask_actor, sequences_critic, sequences_mask_critic)
 
                 action_prob = (torch.softmax(logits_actor, dim=-1).max(dim=-1).values)
@@ -170,7 +171,7 @@ class RLHFTrainer:
                 entropies = (action_prob * actions_log_probs).sum(dim=-1)
 
                 advantages, returns = get_advantages_and_returns(values_历史上某个检查点, rewards_历史, respense_starts, output_ends)
-                print("检查数据returns", returns)
+                # print("检查数据returns", returns)
 
                 ratios = (actions_log_probs - log_probs_actor_历史).exp()
                 advantages = rewards_历史 - values_历史上某个检查点[:, -1]
@@ -189,13 +190,14 @@ class RLHFTrainer:
                 value_loss = torch.max(value_loss1, value_loss2).mean()
                 if torch.isnan(value_loss):
                     raise ValueError('Value loss is nan')
-                print('value_loss', value_loss.item())
-
+                # print('value_loss', value_loss.item())
+                self.actor_critic.zero_grad()
                 self.actor_optimizer.zero_grad()
                 loss.backward(retain_graph=False)
                 self.actor_optimizer.step()
 
                 # upate critic with loss
+                self.actor_critic.zero_grad()
                 self.critic_optimizer.zero_grad()
                 value_loss.backward(retain_graph=False)
                 self.critic_optimizer.step()
@@ -217,7 +219,8 @@ class RLHFTrainer:
             for prompt_ids, masks, type_ids, respense_starts in dataloader.iter_data_set(data_set, batch_size, device):
 
                 #执行一次采样，获取针对当前prompt的输出，并计算相关的价值和奖励
-                prompt_response_ids, prompt_response_masks, logits_actor, log_probs_actor, values, rewards, output_ends = self.actor_critic.generate(prompt_ids, respense_starts)
+                with torch.no_grad():
+                    prompt_response_ids, prompt_response_masks, logits_actor, log_probs_actor, values, rewards, output_ends = self.actor_critic.generate(prompt_ids, respense_starts)
 
                 #收集采样获得的数据
                 memories.append({"values_历史上某个检查点": values, "rewards": rewards, "log_probs_actor_历史": log_probs_actor, "respense_starts": respense_starts, "output_ends": output_ends,
