@@ -28,7 +28,7 @@ from torch.optim import AdamW
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # "1, 0, 2, 3"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = "cuda:0"#"cpu"#
+device = "cpu"#"cuda:0"#
 
 class ActorCritic(nn.Module):
 
@@ -47,6 +47,7 @@ class ActorCritic(nn.Module):
         self.critic_optimizer = self.init_training_plan(self.critic_model, 1e-5)
 
         self.eps = 1e-8
+        self.clip_reward_value = 5
 
     def init_training_plan(self, model, learning_rate):
         parameters = list(model.named_parameters())
@@ -58,7 +59,7 @@ class ActorCritic(nn.Module):
         optimizer = AdamW(parameters)
         return optimizer
 
-    def generate(self, prompt_input_ids, respense_starts):
+    def generate(self, prompt_input_ids, response_starts):
         with torch.no_grad():
             prompt_response_ids = self.actor_model.encoder.generate(prompt_input_ids, max_length=1024, return_dict_in_generate=True)[0]
         attention_mask = prompt_response_ids.not_equal(0).long()
@@ -81,11 +82,12 @@ class ActorCritic(nn.Module):
         output_ends = prompt_response_masks.sum(1)
         rewards_from_env = self.reward_model.forward(prompt_response_ids, prompt_response_masks)
         print("检查数据rewards_from_env", rewards_from_env)
+        reward_clip = torch.clamp(rewards_from_env, -self.clip_reward_value,self.clip_reward_value)
 
         values = self.critic_model.forward(prompt_response_ids, prompt_response_masks)
 
-        for j in range(respense_starts.shape[0]):
-            rewards[j, respense_starts[j]:output_ends[j]][-1] += rewards_from_env[j][0]
+        for j in range(response_starts.shape[0]):
+            rewards[j, response_starts[j]:output_ends[j]][-1] += reward_clip[j, output_ends[j]]
         print("检查数据rewards", rewards)
         return prompt_response_ids, prompt_response_masks, logits_actor, log_probs_actor, values, rewards, output_ends
 
@@ -120,7 +122,7 @@ def get_advantages_and_returns(values, rewards, starts, ends, gamma=1e-5, lam=9e
         for t in reversed(range(s, e)):
             nextvalues = values[:, t + 1] if t < e - 1 else 0.0
             # critic model预测的是t到到最后一个时刻的奖励和，所以变化量delta可以用如下公式表示
-            delta = (rewards[:, t] + gamma * nextvalues) - values[:, t]
+            delta = (rewards[i, t] + gamma * nextvalues) - values[i, t]
             # self.gamma=1，self.lam=0.95是衰减因子，表示之前计算的delta对现在影响越来越小
             lastgaelam = delta + gamma * lam * lastgaelam
         advantages_reversed.append(lastgaelam)
@@ -143,9 +145,8 @@ class RLHFTrainer:
         self.actor_eps_clip = 1
         self.beta_s = 1
 
-
-
     def learn(self, memories):
+        self.actor_critic.train()
         for epoch in range(10):
             for memory in memories:
                 values_历史上某个检查点 = memory["values_历史上某个检查点"]
@@ -163,7 +164,6 @@ class RLHFTrainer:
                 #基于最新的critic计算价值
                 logits_actor, values = self.actor_critic.forward(sequences_actor, sequences_mask_actor, sequences_critic, sequences_mask_critic)
 
-
                 action_prob = (torch.softmax(logits_actor, dim=-1).max(dim=-1).values)
                 actions_log_probs = torch.log(action_prob + self.eps)
                 kl_div_loss = ((action_prob *(log_probs_actor_历史 - actions_log_probs)).sum( dim=-1).mean())
@@ -172,24 +172,16 @@ class RLHFTrainer:
                 advantages, returns = get_advantages_and_returns(values_历史上某个检查点, rewards_历史, respense_starts, output_ends)
                 print("检查数据returns", returns)
 
-                ratios = (logits_actor - log_probs_actor_历史).exp()
+                ratios = (actions_log_probs - log_probs_actor_历史).exp()
                 advantages = rewards_历史 - values_历史上某个检查点[:, -1]
 
                 # normalize advantages
-                advantages = (advantages - advantages.mean(dim=-1)) / (
-                        advantages.std() + self.eps)
+                advantages = (advantages - advantages.mean(dim=-1)) / ( advantages.std() + self.eps)
                 surr1 = advantages * ratios
-                surr2 = (torch.clamp(ratios, 1 - self.actor_eps_clip,
-                                     1 + self.actor_eps_clip) * advantages)
-                policy_loss = -torch.min(surr1,
-                                         surr2) - self.beta_s * entropies
+                surr2 = (torch.clamp(ratios, 1 - self.actor_eps_clip, 1 + self.actor_eps_clip) * advantages)
+                policy_loss = -torch.min(surr1, surr2) - self.beta_s * entropies
                 policy_loss = policy_loss.mean()
                 loss = policy_loss + kl_div_loss
-
-                self.actor_optimizer.zero_grad()
-                loss.backward()
-                self.actor_optimizer.step()
-
 
                 value_loss_clipped = values_历史上某个检查点 + (values - values_历史上某个检查点).clamp(-self.critic_eps_clip, self.critic_eps_clip)
                 value_loss1 = (value_loss_clipped - rewards_历史)**2
@@ -199,18 +191,23 @@ class RLHFTrainer:
                     raise ValueError('Value loss is nan')
                 print('value_loss', value_loss.item())
 
+                self.actor_optimizer.zero_grad()
+                loss.backward(retain_graph=False)
+                self.actor_optimizer.step()
+
                 # upate critic with loss
                 self.critic_optimizer.zero_grad()
-                value_loss.backward()
+                value_loss.backward(retain_graph=False)
                 self.critic_optimizer.step()
                 print(f"检查数据，actor的loss{loss}, critic的loss{value_loss}")
+        self.actor_critic.eval()
 
     def train(self):
         # 加载数据集
         dataloader = DataLoaderPPO()
         data_set = dataloader.load_data_set("回复正负例数据.jsonl")[:20]
         print("数据集大小", len(data_set))
-        reply_period = 2
+        reply_period = 1
 
         memories = []
         # 训练

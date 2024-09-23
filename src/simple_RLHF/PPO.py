@@ -31,9 +31,9 @@ class RewardNetwork(nn.Module):
 
     def forward(self, x, mask):
         embeds = self.encoder(x, attention_mask=mask).logits
-        pooled = masked_mean(embeds, mask, dim=1)
-        pred = self.head(pooled)
-        return pred#.squeeze()
+        # pooled = masked_mean(embeds, mask, dim=1)
+        value = self.head(embeds)
+        return value.squeeze(2)
 
 class ActorNetwork(nn.Module):
 

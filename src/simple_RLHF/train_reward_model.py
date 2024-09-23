@@ -22,7 +22,7 @@ import torch
 from torch import nn
 import json
 from src.simple_RLHF.run_time import path_pretrained_model
-
+from src.simple_RLHF.run_time import PAD_ID
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # "1, 0, 2, 3"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device = "cuda:0"#"cpu"#
@@ -59,6 +59,45 @@ def build_training_corpus_for_reward_model_training():
         for data in samples:
             f.write(json.dumps(data, ensure_ascii=False) + "\n")
 
+class PairWiseLoss(nn.Module):
+    """Pairwise Loss for Ranking Tasks.
+
+    This PyTorch module computes a pairwise loss for ranking tasks where the
+    goal is to compare two inputs and determine which one is "better" than the
+    other. Given two input tensors: `chosen_reward` and `reject_reward`, which
+    should contain reward values for the "chosen" and "rejected" options,
+    respectively, this module computes the probability of the chosen option
+    being "better" than the rejected option using a sigmoid function, and then
+    takes the negative logarithm of that probability to get the loss. The loss
+    is then averaged over the batch dimension and returned as a scalar tensor.
+    Note that this module assumes that higher reward values indicate better
+    options.
+    """
+
+    def __init__(self):
+        super(PairWiseLoss, self).__init__()
+
+    def forward(self, chosen_reward: torch.Tensor,
+                reject_reward: torch.Tensor) -> torch.Tensor:
+        """Compute pairwise loss.
+
+        Args:
+        - chosen_reward: A tensor of shape (batch_size,) containing reward values for the chosen option
+        - reject_reward: A tensor of shape (batch_size,) containing reward values for the rejected option
+
+        Returns:
+        - loss: A scalar tensor containing the computed pairwise loss
+        """
+
+        # Compute probability of the chosen option being better than the rejected option
+        probs = torch.sigmoid(chosen_reward - reject_reward)
+
+        # Take the negative logarithm of the probability to get the loss
+        log_probs = torch.log(probs)
+        loss = -log_probs.mean()
+
+        return loss
+
 from src.simple_RLHF.utils import DataLoader
 from torch.optim import AdamW
 def train_reward_model():
@@ -76,7 +115,7 @@ def train_reward_model():
 
     #加载数据集
     dataloader = DataLoader()
-    data_set = dataloader.load_data_set("回复正负例数据.jsonl")[:10]
+    data_set = dataloader.load_data_set("回复正负例数据.jsonl")[:30]
     print("数据集大小", len(data_set))
 
 
@@ -88,15 +127,50 @@ def train_reward_model():
     #训练
     for epoch in range(1):
         count = 0
-        batch_size=2
+        batch_size=3
         for p_input_ids, p_masks, p_type_ids, n_input_ids, n_masks, n_type_ids in dataloader.iter_data_set(data_set, batch_size, device):
             model.zero_grad()
             reward_p = model.forward(p_input_ids, p_masks)
             reward_n = model.forward(n_input_ids, n_masks)
-            loss = -nn.functional.logsigmoid(reward_p - reward_n).mean()
+            # loss = - nn.functional.logsigmoid(reward_p - reward_n).mean()
+
+            chosen_end_scores = []
+            rejected_end_scores = []
+            c_truncated_reward_list = []
+            r_truncated_reward_list = []
+            bs = p_input_ids.shape[0]
+            for i in range(bs):
+                # Check if there is any padding otherwise take length of sequence
+                c_inds = (p_input_ids[i] == PAD_ID).nonzero()
+                c_ind = c_inds[0].item() if len(c_inds) > 0 else p_input_ids.shape[1]
+                r_inds = (n_input_ids[i] == PAD_ID).nonzero()
+                r_ind = r_inds[0].item() if len(r_inds) > 0 else n_input_ids.shape[1]
+                end_ind = max(c_ind, r_ind)
+
+                # Retrieve first index where trajectories diverge
+                divergence_ind = (p_input_ids[i] !=n_input_ids[i]).nonzero()[0]
+                assert divergence_ind > 0
+
+                # Index into the correct rewards
+                c_truncated_reward = reward_p[i]
+                r_truncated_reward = reward_n[i]
+                # print("c_truncated_reward", c_truncated_reward)
+                # print("r_truncated_reward", r_truncated_reward)
+                # Append the last rewards to the list of end scores
+                chosen_end_scores.append(c_truncated_reward[end_ind-1])
+                rejected_end_scores.append(r_truncated_reward[end_ind-1])
+                c_truncated_reward_list.append(c_truncated_reward)
+                r_truncated_reward_list.append(r_truncated_reward)
+
+            # Stack the end scores and return them
+            c_truncated_reward_list = torch.stack(c_truncated_reward_list)
+            r_truncated_reward_list = torch.stack(r_truncated_reward_list)
+            # Calculate the loss
+            loss = PairWiseLoss()(c_truncated_reward_list, r_truncated_reward_list)
+
             loss.backward()
             optimizer.step()
-            if count%5==0:
+            if count%1==0:
                 print(f"任务进度epoch:{epoch}, batch序号{count}/{int(len(data_set)/batch_size)}")
                 print("损失值", loss)
             count += 1
