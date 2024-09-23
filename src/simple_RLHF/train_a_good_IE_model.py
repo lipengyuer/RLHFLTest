@@ -25,25 +25,31 @@ import torch
 from src.simple_RLHF.utils import DataLoaderPPO
 from src.simple_RLHF.PPO import ActorNetwork, RewardNetwork
 from torch.optim import AdamW
+from collections import OrderedDict
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "0"  # "1, 0, 2, 3"
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = "cpu"#"cuda:0"#
+device = "cuda:0"#"cpu"#
 
 class ActorCritic(nn.Module):
 
-    def __init__(self):
+    def __init__(self, reward_model_path):
         super(ActorCritic, self).__init__()
 
         # 初始化actor和reference
         self.actor_model = ActorNetwork()
         self.reference_model = ActorNetwork()
 
-        self.actor_optimizer = self.init_training_plan(self.actor_model, 1e-5)
+        self.actor_optimizer = self.init_training_plan(self.actor_model, 1e-6)
 
-        # 初始化critic和reward
+        # 初始化critic和reward,加载微调得到的模型参数
         self.critic_model = RewardNetwork()
         self.reward_model = RewardNetwork()
+        if len(reward_model_path)>0:#如果有
+            state_dict = torch.load(reward_model_path).state_dict()
+            self.critic_model.load_state_dict(state_dict)
+            self.reward_model.load_state_dict(state_dict)
+
         self.critic_optimizer = self.init_training_plan(self.critic_model, 1e-5)
 
         self.eps = 1e-8
@@ -138,11 +144,11 @@ class RLHFTrainer:
 
     def __init__(self):
         # 初始化模型
-        self.actor_critic = ActorCritic().to(device)
+        self.actor_critic = ActorCritic("reward_model.pth").to(device)
         self.actor_optimizer, self.critic_optimizer = self.actor_critic.actor_optimizer, self.actor_critic.critic_optimizer
         self.eps = 1e-8
-        self.critic_eps_clip = 1
-        self.actor_eps_clip = 1
+        self.critic_eps_clip = 5
+        self.actor_eps_clip = 5
         self.beta_s = 1
 
     def learn(self, memories):
@@ -169,9 +175,6 @@ class RLHFTrainer:
                 actions_log_probs = torch.log(action_prob + self.eps)
                 kl_div_loss = ((action_prob *(log_probs_actor_历史 - actions_log_probs)).sum( dim=-1).mean())
                 entropies = (action_prob * actions_log_probs).sum(dim=-1)
-
-                advantages, returns = get_advantages_and_returns(values_历史上某个检查点, rewards_历史, respense_starts, output_ends)
-                # print("检查数据returns", returns)
 
                 ratios = (actions_log_probs - log_probs_actor_历史).exp()
                 advantages = rewards_历史 - values_历史上某个检查点[:, -1]
@@ -231,8 +234,19 @@ class RLHFTrainer:
                     self.learn(memories)
                     memories = []
 
+        torch.save(self.actor_critic.actor_model, "actor_model.pth")
 
+
+def test_actor_model():
+    tokenizer = BertTokenizer.from_pretrained(path_pretrained_model)
+    actor = ActorNetwork()
+    actor.eval()
+    text_generator = TextGenerationPipeline(actor, tokenizer)
+    res = text_generator("这是很久之前的事情了", max_length=100, do_sample=True)
+    print(res)
 if __name__ == '__main__':
 
     trainer = RLHFTrainer()
     trainer.train()
+
+    # test_actor_model()

@@ -3,7 +3,9 @@
   <component name="ChangeListManager">
     <list default="true" id="3d07445e-1227-4c84-a06a-4f450a1c1a7e" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/simple_RLHF/PPO.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/simple_RLHF/PPO.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/simple_RLHF/train_a_good_IE_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/simple_RLHF/train_a_good_IE_model.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/simple_RLHF/train_reward_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/simple_RLHF/train_reward_model.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -109,6 +111,23 @@
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/simple_RLHF/train_a_good_IE_model.py</url>
+          <line>48</line>
+          <option name="timeStamp" value="20" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/simple_RLHF/train_a_good_IE_model.py</url>
+          <line>50</line>
+          <option name="timeStamp" value="21" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/src/simple_RLHF/train_a_good_IE_model.py</url>
+          <line>49</line>
+          <option name="timeStamp" value="22" />
+        </line-breakpoint>
+      </breakpoints>
       <default-breakpoints>
         <breakpoint type="python-exception">
           <properties notifyOnTerminate="true" exception="BaseException">

@@ -4,7 +4,6 @@ import sys, os
 # 使用注意力来辅助顶层模型分配对各个辅助任务模块的权重
 import time
 
-from src.simple_RLHF.PPO import RewardNetwork
 
 path1 = os.getcwd()
 path2 = os.path.dirname(path1)
@@ -16,6 +15,7 @@ sys.path.append(path2)
 sys.path.append(path3)
 sys.path.append(path4)
 sys.path.append(path5)
+from src.simple_RLHF.PPO import RewardNetwork
 
 import torch
 

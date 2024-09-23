@@ -3,7 +3,8 @@ import torch.nn.functional as F
 from transformers import BertTokenizer, GPT2LMHeadModel, TextGenerationPipeline
 from src.simple_RLHF.run_time import path_pretrained_model
 from einops import rearrange
-
+import torch
+from collections import OrderedDict
 
 def masked_mean(seq, mask = None, dim = 1, keepdim = False):
     if mask is None:
@@ -40,7 +41,6 @@ class ActorNetwork(nn.Module):
     def __init__(self):
         super().__init__()
         self.encoder = GPT2LMHeadModel.from_pretrained(path_pretrained_model)
-
     def forward(self, input_ids, masks):
         # logits = self.encoder.generate(input_ids, attention_mask=masks, max_length=1024)
         logits = self.encoder.forward(input_ids, attention_mask=masks).logits
