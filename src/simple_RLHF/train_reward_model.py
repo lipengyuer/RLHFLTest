@@ -16,7 +16,7 @@ sys.path.append(path3)
 sys.path.append(path4)
 sys.path.append(path5)
 from src.simple_RLHF.PPO import RewardNetwork
-
+from src.simple_RLHF.run_time import MAX_LEN_PROMPT, MAX_LEN_RESPONSE
 import torch
 
 from torch import nn
@@ -32,10 +32,14 @@ def build_training_corpus_for_reward_model_training():
     datas = [json.loads(line) for line in open("all20230103_QA_第二期.jsonl", 'r', encoding='utf8').readlines()]
     from transformers import BertTokenizer, GPT2LMHeadModel, TextGenerationPipeline
 
-    tokenizer = BertTokenizer.from_pretrained(path_pretrained_model)
+    tokenizer = BertTokenizer.from_pretrained(path_pretrained_model, padding_side='left')
+    tokenizer.padding_side = "left"
+    tokenizer.pad_token_id = 0
+    # tokenizer.eos_token_id = 0
+
     model = GPT2LMHeadModel.from_pretrained(path_pretrained_model)
     model.to(device)
-    text_generator = TextGenerationPipeline(model, tokenizer, device=device)
+    text_generator = TextGenerationPipeline(model, tokenizer, device=device, pad_token_id=tokenizer.eos_token_id)
     # res =  text_generator("这是很久之前的事情了", max_length=100, do_sample=True)
 
     samples = []
@@ -47,11 +51,11 @@ def build_training_corpus_for_reward_model_training():
 
         for i in range(2, len(对话), 2):
             question, answer = 对话[i]["content"], 对话[i + 1]["content"]
-            prompt = text[:1000] + question + "[分隔符]"
+            prompt = (text + question)[:MAX_LEN_PROMPT] + "[分隔符]"
             tokens = tokenizer.tokenize(prompt)
             answer_info_from_model = text_generator(prompt, max_length=len(tokens) + 30, do_sample=True)
             # print("检查数据，提示信息", prompt)
-            answer_from_model = answer_info_from_model[0]["generated_text"].split("[分隔符]")[-1]
+            answer_from_model = answer_info_from_model[0]["generated_text"].split("[分隔符]")[-1].replace(" ", "")
             # print("检查数据", question, )
             # print("###############")
             samples.append({"prompt": prompt, "positive_answer": answer, "negative_answer": answer_from_model})
@@ -112,22 +116,21 @@ def train_reward_model():
         optimizer = AdamW(parameters)
         return optimizer
 
-
     #加载数据集
     dataloader = DataLoader()
-    data_set = dataloader.load_data_set("回复正负例数据.jsonl")[:30]
+    data_set = dataloader.load_data_set("回复正负例数据.jsonl")
     print("数据集大小", len(data_set))
-
 
     #初始化模型
     lr = 1e-6
     model = RewardNetwork().to(device)
     optimizer = init_model_and_training_plan(model, lr)
+    model.train()
 
     #训练
-    for epoch in range(1):
+    for epoch in range(5):
         count = 0
-        batch_size=3
+        batch_size = 2
         for p_input_ids, p_masks, p_type_ids, n_input_ids, n_masks, n_type_ids in dataloader.iter_data_set(data_set, batch_size, device):
             model.zero_grad()
             reward_p = model.forward(p_input_ids, p_masks)
@@ -139,6 +142,12 @@ def train_reward_model():
             c_truncated_reward_list = []
             r_truncated_reward_list = []
             bs = p_input_ids.shape[0]
+
+            prompt_response_masks = p_input_ids > 0.5
+            output_end1 = torch.max(prompt_response_masks.sum(1))
+            prompt_response_masks = n_input_ids > 0.5
+            output_end2 = torch.max(prompt_response_masks.sum(1))
+            output_end = max([output_end2, output_end1])
             for i in range(bs):
                 # Check if there is any padding otherwise take length of sequence
                 c_inds = (p_input_ids[i] == PAD_ID).nonzero()
@@ -152,8 +161,9 @@ def train_reward_model():
                 assert divergence_ind > 0
 
                 # Index into the correct rewards
-                c_truncated_reward = reward_p[i]
-                r_truncated_reward = reward_n[i]
+                c_truncated_reward = reward_p[i][:output_end]
+                r_truncated_reward = reward_n[i][:output_end]
+                # print("检查数据", output_end, end_ind)
                 # print("c_truncated_reward", c_truncated_reward)
                 # print("r_truncated_reward", r_truncated_reward)
                 # Append the last rewards to the list of end scores
@@ -167,12 +177,11 @@ def train_reward_model():
             r_truncated_reward_list = torch.stack(r_truncated_reward_list)
             # Calculate the loss
             loss = PairWiseLoss()(c_truncated_reward_list, r_truncated_reward_list)
-
+            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            if count%1==0:
-                print(f"任务进度epoch:{epoch}, batch序号{count}/{int(len(data_set)/batch_size)}")
-                print("损失值", loss)
+            if count%5==0:
+                print(f"任务进度epoch:{epoch}, batch序号{count}/{int(len(data_set)/batch_size)},损失值{loss}")
             count += 1
 
     #保存模型

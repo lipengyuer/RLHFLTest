@@ -3,9 +3,11 @@
   <component name="ChangeListManager">
     <list default="true" id="3d07445e-1227-4c84-a06a-4f450a1c1a7e" name="Changes" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/simple_RLHF/PPO.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/simple_RLHF/PPO.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/simple_RLHF/run_time.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/simple_RLHF/run_time.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/simple_RLHF/train_a_good_IE_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/simple_RLHF/train_a_good_IE_model.py" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/src/simple_RLHF/train_reward_model.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/simple_RLHF/train_reward_model.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/simple_RLHF/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/simple_RLHF/utils.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/simple_RLHF/回复正负例数据.jsonl" beforeDir="false" afterPath="$PROJECT_DIR$/src/simple_RLHF/回复正负例数据.jsonl" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -25,19 +27,20 @@
     <option name="showLibraryContents" value="true" />
     <option name="showMembers" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/work/git_codes/RLHFTest&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "last_opened_file_path": "C:/work/git_codes/RLHFTest/src/simple_RLHF"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\work\git_codes\RLHFTest\src\simple_RLHF" />
       <recent name="C:\work\git_codes\RLHFTest" />
     </key>
   </component>
-  <component name="RunManager" selected="Python.train_a_good_IE_model">
+  <component name="RunManager" selected="Python.train_reward_model">
     <configuration name="train_a_good_IE_model" type="PythonConfigurationType" factoryName="Python" temporary="true" nameIsGenerated="true">
       <module name="RLHFTest" />
       <option name="INTERPRETER_OPTIONS" value="" />
@@ -82,8 +85,8 @@
     </configuration>
     <recent_temporary>
       <list>
-        <item itemvalue="Python.train_a_good_IE_model" />
         <item itemvalue="Python.train_reward_model" />
+        <item itemvalue="Python.train_a_good_IE_model" />
       </list>
     </recent_temporary>
   </component>
@@ -114,18 +117,8 @@
       <breakpoints>
         <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
           <url>file://$PROJECT_DIR$/src/simple_RLHF/train_a_good_IE_model.py</url>
-          <line>48</line>
-          <option name="timeStamp" value="20" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/simple_RLHF/train_a_good_IE_model.py</url>
-          <line>50</line>
-          <option name="timeStamp" value="21" />
-        </line-breakpoint>
-        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
-          <url>file://$PROJECT_DIR$/src/simple_RLHF/train_a_good_IE_model.py</url>
-          <line>49</line>
-          <option name="timeStamp" value="22" />
+          <line>230</line>
+          <option name="timeStamp" value="36" />
         </line-breakpoint>
       </breakpoints>
       <default-breakpoints>

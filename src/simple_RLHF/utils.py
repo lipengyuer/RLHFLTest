@@ -4,13 +4,15 @@ import random
 import torch
 from transformers import BertTokenizer, GPT2LMHeadModel, TextGenerationPipeline
 from src.simple_RLHF.run_time import path_pretrained_model
-
+import numpy as np
+from src.simple_RLHF.run_time import MAX_LEN_PROMPT, MAX_LEN_RESPONSE
 class DataLoader:
 
     def __init__(self):
         self.tokenizer = BertTokenizer.from_pretrained(path_pretrained_model)
+        self.tokenizer.padding_side = "left"
 
-    def get_features(self, text, max_len=1024):
+    def get_features(self, text, max_len=MAX_LEN_PROMPT + MAX_LEN_RESPONSE):
         features = {"text": text}
         tokens = self.tokenizer.tokenize(text)
         features["tokens"] = tokens#["[CLS]"] + tokens
@@ -56,20 +58,28 @@ class DataLoader:
             p_batch, n_batch = [[], [], []], [[], [], []]
 
 
-
 class DataLoaderPPO:
 
     def __init__(self):
         print("检查数据path_pretrained_model", path_pretrained_model)
         self.tokenizer = BertTokenizer.from_pretrained(path_pretrained_model)
+        self.tokenizer.padding_side = "left"
+        self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
 
-    def get_features(self, text, max_len=1000):
-        features = {"text": text}
-        tokens = self.tokenizer.tokenize(text)
+    def get_features(self, texts, max_len=1024):
+        features = {"texts": texts}
+        tokens = [self.tokenizer.tokenize(text) for text in texts]
         features["tokens"] = tokens#["[CLS]"] + tokens
-        features["input_ids"] = self.tokenizer.convert_tokens_to_ids(tokens) + [0] * (max_len - len(features["tokens"]))
-        features["masks"] = [1] * len(features["tokens"]) + [0] * (max_len - len(features["tokens"]))
-        features["type_ids"] = [0] * max_len
+        #使用自带工具生成基本数据
+        feature = self.tokenizer(texts, return_tensors="np", padding=True, truncation=True)
+        features["input_ids"] = feature['input_ids']
+        features["masks"] = feature['attention_mask']
+        features["type_ids"] = feature['token_type_ids']
+        max_seq_len = feature['input_ids'][0].shape[0]
+        features["response_starts"] = np.array([[max_seq_len] for _ in range(len(texts))])
+
         return features
 
     def load_data_set(self, file_path):
@@ -79,20 +89,20 @@ class DataLoaderPPO:
             samples.append(self.get_features(data["prompt"]))
         return samples
 
-    def iter_data_set(self, samples, batch_size, device):
-        random.shuffle(samples)
-        batches, batch = [], [[], [], [], [], []]
-        for sample in samples:
-            batch[0].append(sample["input_ids"])
-            batch[1].append(sample["masks"])
-            batch[2].append(sample["type_ids"])
-            batch[3].append(len(sample["tokens"]))
+    def iter_data_set(self, file_path, batch_size, device):
+        datas = [json.loads(line) for line in open(file_path, 'r', encoding="utf8").readlines()]
 
-            if len(batch[0])==batch_size:
-                torch.tensor(batch[0], device=device).long()
-                yield torch.tensor(batch[0], device=device).long(), torch.tensor(batch[1], device=device).long(), torch.tensor(batch[2], device=device).long(), torch.IntTensor(batch[3])
-                batch = [[], [], [], [], []]
+        random.shuffle(datas)
+        qa_batch = []
+        for data in datas:
+            qa_batch.append(data["prompt"])
+            if len(qa_batch) == batch_size:
+                features = self.get_features(qa_batch)
+                yield torch.tensor(features["input_ids"], device=device).long(), torch.tensor(features["masks"],device=device).long(), torch.tensor(features["type_ids"], device=device).long(), torch.IntTensor(features["response_starts"])
+                qa_batch = []
 
-        if len(batch[0])>0:
-            yield torch.tensor(batch[0], device=device).long(), torch.tensor(batch[1], device=device).long(), torch.tensor(batch[2], device=device).long(), torch.IntTensor(batch[3])
-            batch = [[], [], [], [], []]
+        if len(qa_batch) > 0:
+            features = self.get_features(qa_batch)
+            yield torch.tensor(features["input_ids"], device=device).long(), torch.tensor(features["masks"], device=device).long(), torch.tensor(features["type_ids"], device=device).long(), torch.IntTensor(features["response_starts"])
+            qa_batch = []
+
